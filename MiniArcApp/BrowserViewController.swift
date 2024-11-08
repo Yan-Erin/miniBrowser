@@ -107,6 +107,7 @@ class BrowserViewController: UIViewController {
             
             let request = URLRequest(url: url)
             webView.load(request)
+        urlTextField.text = url.absoluteString
     }
     
     @objc private func goBack() {
