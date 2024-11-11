@@ -8,86 +8,89 @@
 import UIKit
 import WebKit
 
-class BrowserViewController: UIViewController {
+class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate {
+
     private var webView: WKWebView!
     private var urlTextField: UITextField!
     private var goButton: UIButton!
     private var backButton:UIButton!
     private var forwardButton:UIButton!
+    private var bottomBar: BottomBarView!
+    private var currentTitle: String!
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .white
         setupUI()
-
+        webView.navigationDelegate = self
+        
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(didTapOutsideBottomBar))
+        tapGesture.cancelsTouchesInView = false
+        
+        view.addGestureRecognizer(tapGesture)
+        webView.addGestureRecognizer(tapGesture)
     }
+
+    
+    deinit {
+        webView.removeObserver(self, forKeyPath: "title")
+    }
+    
     private func setupUI() {
         webView = WKWebView(frame: .zero)
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         
-        urlTextField = UITextField()
-        urlTextField.placeholder = "Enter URL"
-        urlTextField.borderStyle = .roundedRect
-        urlTextField.keyboardType = .URL
-        urlTextField.autocapitalizationType = .none
-        view.addSubview(urlTextField)
-        urlTextField.translatesAutoresizingMaskIntoConstraints = false
+        bottomBar = BottomBarView(context: .defaultState)
+        bottomBar.delegate = self
+
+        bottomBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(bottomBar)
         
-        goButton = UIButton(type: .system)
-        goButton.setTitle("Go", for: .normal)
-        goButton.addTarget(self, action: #selector(loadUrl), for: .touchUpInside)
-        view.addSubview(goButton)
-        goButton.translatesAutoresizingMaskIntoConstraints = false
-        
-        backButton = UIButton(type: .system)
-        backButton.setTitle("<", for: .normal)
         setupConstraints()
     }
     
-    private func setupConstraints() {
+    private func setupBottomBarConstraints() {
         NSLayoutConstraint.activate([
-            urlTextField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
-            urlTextField.trailingAnchor.constraint(equalTo: goButton.leadingAnchor, constant: -10),
-            urlTextField.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
-            urlTextField.heightAnchor.constraint(equalToConstant: 40)
+            bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            bottomBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
         
-        NSLayoutConstraint.activate([
-            goButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
-            goButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
-            goButton.widthAnchor.constraint(equalToConstant: 40),
-            goButton.heightAnchor.constraint(equalToConstant: 40),
-            
-        ])
-        
+    }
+    private func setupWebView() {
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: urlTextField.bottomAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
 
         ])
     }
-    private func createUrlFromInput() -> URL? {
+    
+    private func setupConstraints() {
+        setupWebView()
+        setupBottomBarConstraints()
+        
+    }
+    private func createUrlFromInput(_ urlString: String) -> URL? {
         let urlDetectorRegex = "^[A-Z0-9a-z._%+-]+\\.+[A-Za-z]{2,}$"
         let httpDetectorRegex = "^https?://"
-        guard let urlTextField = urlTextField.text else {return nil}
         do {
             let urlregex = try NSRegularExpression(pattern: urlDetectorRegex)
-            let range = NSRange(location: 0, length: urlTextField.utf16.count)
+            let range = NSRange(location: 0, length: urlString.utf16.count)
             if urlregex.firstMatch(in: urlDetectorRegex, options: [], range:range) != nil {
                 let httpregex = try NSRegularExpression(pattern: httpDetectorRegex)
                 /* found http or https */
                 if httpregex.firstMatch(in: urlDetectorRegex, options: [], range:range) != nil {
-                    return URL(string: urlTextField)
+                    return URL(string: urlString)
                 }
                 /* Need to add  protocol prefix  */
-                let urlString = "https://\(urlTextField)"
+                let urlString = "https://\(urlString)"
                 return URL(string: urlString)
             } else {
                 var googleSearch = "https://www.google.com/search?q="
-                urlTextField.components(separatedBy: " ").forEach {word in
+                urlString.components(separatedBy: " ").forEach {word in
                     googleSearch += "\(word)%20"
                 }
                 return URL(string: googleSearch)
@@ -95,19 +98,31 @@ class BrowserViewController: UIViewController {
         } catch {
             return nil
         }
-        return nil
     }
-
     
-    @objc private func loadUrl() {
-        guard let url = createUrlFromInput() else {
+    @objc private func loadUrl(_ urlString: String) {
+        guard let url = createUrlFromInput(urlString) else {
                 print("Invalid URL")
                 return
             }
             
             let request = URLRequest(url: url)
             webView.load(request)
-        urlTextField.text = url.absoluteString
+    }
+    
+    // WKNavigationDelegate method called when the page finishes loading
+      func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+          currentTitle = webView.title
+          
+          if let urlString = webView.url?.absoluteString {
+              let browsedPage = BrowserPage(url: webView.url!, urlString: urlString, title: currentTitle)
+              bottomBar.addToPrevSearches(browsedPage)
+          }
+      }
+      
+    
+    func didRequestURLLoad(_ urlString: String) {
+        loadUrl(urlString)
     }
     
     @objc private func goBack() {
@@ -119,6 +134,16 @@ class BrowserViewController: UIViewController {
     @objc private func goForward() {
         if webView.canGoForward {
             webView.goForward()
+        }
+    }
+    
+    @objc private func didTapOutsideBottomBar(_ sender: UITapGestureRecognizer) {
+        let location = sender.location(in: view)
+        print("Tapped at location: \(location) \(bottomBar.getBottomBarState())")
+        if !bottomBar.frame.contains(location) && bottomBar.getBottomBarState() == .searchState {
+            print("hit this")
+            view.endEditing(true)  // Dismiss keyboard if it's open
+            bottomBar.setBrowseState()
         }
     }
 }
