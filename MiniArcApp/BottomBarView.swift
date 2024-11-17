@@ -11,6 +11,10 @@ protocol BottomBarViewDelegate: AnyObject {
     func didRequestURLLoad(_ urlString: String)
 }
 
+@objc protocol ShowTabsViewDelegate: AnyObject {
+    func showTabSelector()
+}
+
 enum BottomBarContext {
     case defaultState
     case browsingState
@@ -26,6 +30,8 @@ struct BrowserPage {
 
 class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableViewDataSource {
     weak var delegate: BottomBarViewDelegate?
+    weak var tabsDelegate: ShowTabsViewDelegate?
+
     private var context: BottomBarContext
     private var heightConstraint: NSLayoutConstraint?
     private var previousSearches: [BrowserPage] = []
@@ -74,7 +80,7 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         heightConstraint = heightAnchor.constraint(equalToConstant: newHeight)
         heightConstraint?.isActive = true
         superview?.layoutIfNeeded()
-        }
+    }
     
     private func setupBottomBarViewForDefaultState() {
         let desktopButton = UIButton(type: .system)
@@ -97,8 +103,8 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         
         addSubview(stackView)
         NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
             stackView.centerYAnchor.constraint(equalTo: centerYAnchor, constant:-5),
         ])
 
@@ -106,12 +112,17 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
 
     private func setupBottomBarViewForBrowsingState() {
         let tabsButton = UIButton(type: .system)
+
         tabsButton.setImage(UIImage(systemName: "square.on.square"), for: .normal)
+        tabsButton.addTarget(self, action:#selector(handleTabsButtonPressed), for:.touchUpInside)
+        
         let plusButton = UIButton(type: .system)
         plusButton.setImage(UIImage(systemName: "plus"), for: .normal)
         plusButton.addTarget(self, action: #selector(setSearchState), for: .touchUpInside)
+        
         let moreInfoButton = UIButton(type: .system)
         moreInfoButton.setImage(UIImage(systemName: "chevron.up"), for: .normal)
+        
         let stackView = UIStackView(arrangedSubviews: [tabsButton, plusButton, moreInfoButton])
         stackView.axis = .horizontal
         stackView.alignment = .center
@@ -120,8 +131,8 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         addSubview(stackView)
         
         NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
             stackView.centerYAnchor.constraint(equalTo: centerYAnchor, constant:-5),
         ])
     }
@@ -180,7 +191,7 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-            return previousSearches.count
+        return previousSearches.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -189,11 +200,16 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
             cell.textLabel?.text = search.title.isEmpty ? search.urlString : search.title
             cell.textLabel?.textColor = .systemBlue
             return cell
-        }
-    
-   func getBottomBarState() -> BottomBarContext {
-        return context
     }
+    
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let selectedPage = previousSearches[indexPath.row]
+        print("Selected row \(indexPath.row) \(previousSearches.count)")
+        print("\(selectedPage)")
+        delegate?.didRequestURLLoad(selectedPage.urlString)
+        setBrowseState()
+    }
+
     /* Handle State Changes here*/
     private func clearSubViews() {
         subviews.forEach { $0.removeFromSuperview() }
@@ -204,12 +220,14 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         clearSubViews()
         setupBottomBarViewForSearchingState()
     }
+    @objc func handleTabsButtonPressed() {
+        tabsDelegate?.showTabSelector()
+    }
     @objc func setBrowseState() {
         self.context = .browsingState
         updateHeight(for:.browsingState)
         clearSubViews()
         setupBottomBarViewForBrowsingState()
-
     }
     @objc func setHiddenState() {
         self.context = .hiddenState
@@ -223,4 +241,7 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         clearSubViews()
         setupBottomBarViewForDefaultState()
     }
+    func getBottomBarState() -> BottomBarContext {
+         return context
+     }
 }
