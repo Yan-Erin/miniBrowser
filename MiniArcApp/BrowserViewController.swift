@@ -14,7 +14,8 @@ struct BrowserTab {
     var url: URL?
 }
 
-class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate, ShowTabsViewDelegate {
+
+class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate, ShowTabsViewDelegate, PageForwardDelegate, PageBackwardDelegate, PageReloadDelegate {
 
     private var tabs: [BrowserTab] = []
     private var currentTabIndex: Int = 0
@@ -40,9 +41,6 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
     }
     
     private func setupGestures() {
-        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(didTapOutsideBottomBar))
-        self.view.addGestureRecognizer(tapGesture)
-        
         let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(respondToSwipeGesture))
         swipeRight.direction = .right
         swipeRight.direction = UISwipeGestureRecognizer.Direction.right
@@ -66,6 +64,11 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
             self.view.addGestureRecognizer(swipeDown)
     }
     
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Allow your gesture recognizers to work alongside WKWebView scrolling
+        return true
+    }
+    
     private func setupUI() {
         webView = WKWebView(frame: .zero)
         view.addSubview(webView)
@@ -74,6 +77,10 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         bottomBar = BottomBarView(context: .defaultState)
         bottomBar.delegate = self
         bottomBar.tabsDelegate = self
+        bottomBar.backwardDelegate = self
+        bottomBar.forwardDelegate = self
+        bottomBar.reloadDelegate = self
+
         bottomBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bottomBar)
         
@@ -140,27 +147,23 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         loadUrl(urlString)
     }
     
-    @objc private func goBack() {
+    @objc internal func goBack() {
+        print("called Go back")
         if webView.canGoBack {
             webView.goBack()
         }
     }
     
-    @objc private func goForward() {
+    @objc internal func goForward() {
         if webView.canGoForward {
             webView.goForward()
         }
     }
     
-    @objc func didTapOutsideBottomBar(_ sender: UITapGestureRecognizer) {
-        let location = sender.location(in: view)
-        print("Tapped at location: \(location) \(bottomBar.getBottomBarState())")
-        if !bottomBar.frame.contains(location) && bottomBar.getBottomBarState() == .searchState {
-            print("hit this")
-            view.endEditing(true)  // Dismiss keyboard if it's open
-            bottomBar.setBrowseState()
-        }
+    @objc internal func reloadPage() {
+        webView.reload()
     }
+    
     @objc func respondToSwipeGesture(gesture:UIGestureRecognizer) {
         if let swipeGesture = gesture as? UISwipeGestureRecognizer {
             switch swipeGesture.direction {
@@ -172,12 +175,12 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
                 goForward()
             case .down:
                 print("Swiped down")
-                bottomBar.setHiddenState()
-            case .up:
-                print("Swiped up")
                 if bottomBar.getBottomBarState() == .hiddenState {
                     bottomBar.setBrowseState()
                 }
+            case .up:
+                print("Swiped up")
+                bottomBar.setHiddenState()
             default :
                 break
             }
@@ -216,5 +219,6 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         tabSelector.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
         present(tabSelector, animated: true, completion: nil)
     }
+    
 }
 

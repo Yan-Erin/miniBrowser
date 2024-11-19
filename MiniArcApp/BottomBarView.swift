@@ -15,10 +15,22 @@ protocol BottomBarViewDelegate: AnyObject {
     func showTabSelector()
 }
 
+@objc protocol PageForwardDelegate: AnyObject {
+    func goForward()
+}
+
+@objc protocol PageBackwardDelegate: AnyObject {
+    func goBack()
+}
+@objc protocol PageReloadDelegate: AnyObject {
+    func reloadPage()
+}
+
 enum BottomBarContext {
     case defaultState
     case browsingState
     case searchState
+    case infoState
     case hiddenState
 }
 
@@ -31,7 +43,10 @@ struct BrowserPage {
 class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableViewDataSource {
     weak var delegate: BottomBarViewDelegate?
     weak var tabsDelegate: ShowTabsViewDelegate?
-
+    weak var forwardDelegate:PageForwardDelegate?
+    weak var backwardDelegate:PageBackwardDelegate?
+    weak var reloadDelegate:PageReloadDelegate?
+    
     private var context: BottomBarContext
     private var heightConstraint: NSLayoutConstraint?
     private var previousSearches: [BrowserPage] = []
@@ -57,6 +72,8 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
             setupBottomBarViewForBrowsingState()
         case .searchState:
             setupBottomBarViewForSearchingState()
+        case .infoState:
+            setupBottomBarViewForInfoState()
         case .hiddenState:
             setupBottomBarViewForHiddenState()
         }
@@ -73,13 +90,17 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
             newHeight = 75
         case .searchState:
             newHeight = 500
+        case .infoState:
+            newHeight = 500
         case .hiddenState:
             newHeight = 10
         }
         
         heightConstraint = heightAnchor.constraint(equalToConstant: newHeight)
         heightConstraint?.isActive = true
-        superview?.layoutIfNeeded()
+        UIView.animate(withDuration: 0.1){
+            self.superview?.layoutIfNeeded()
+        }
     }
     
     private func setupBottomBarViewForDefaultState() {
@@ -122,6 +143,7 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         
         let moreInfoButton = UIButton(type: .system)
         moreInfoButton.setImage(UIImage(systemName: "chevron.up"), for: .normal)
+        moreInfoButton.addTarget(self, action: #selector(setInfoState), for: .touchUpInside)
         
         let stackView = UIStackView(arrangedSubviews: [tabsButton, plusButton, moreInfoButton])
         stackView.axis = .horizontal
@@ -145,8 +167,8 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         urlTextField.autocapitalizationType = .none
         urlTextField.returnKeyType = .go
         urlTextField.delegate = self
-        addSubview(urlTextField)
         urlTextField.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(urlTextField)
         
         NSLayoutConstraint.activate([
             urlTextField.leadingAnchor.constraint(equalTo: leadingAnchor, constant:10),
@@ -168,13 +190,71 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
             searchesTableView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             searchesTableView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
         ])
-        
-        
     }
     
-    private func setupBottomBarViewForHiddenState() {
+    private func setupBottomBarViewForInfoState() {
+        let urlTextField = UITextField()
+        urlTextField.placeholder = "Enter text"
+        urlTextField.textAlignment = .center
+        urlTextField.borderStyle = .roundedRect
+        urlTextField.translatesAutoresizingMaskIntoConstraints = false
+       
+        let leftPadding = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 30))
+        let backButton = UIButton()
+        backButton.setImage(UIImage(systemName:"chevron.left"), for: .normal)
+        backButton.frame = CGRect(x: 0, y: 10, width: 30, height: 30)
+        backButton.tintColor = .gray
+        backButton.addTarget(self, action: #selector(handleBackButtonPressed), for: .touchUpInside)
+    
+        let forwardButton = UIButton()
+        forwardButton.setImage(UIImage(systemName:"chevron.right"), for: .normal)
+        forwardButton.frame = CGRect(x: 0, y: 10, width: 30, height: 30)
+        forwardButton.tintColor = .gray
+        forwardButton.addTarget(self, action: #selector(handleForwardButtonPressed), for: .touchUpInside)
+        
+        let leftStackView = UIStackView(arrangedSubviews: [leftPadding, backButton, forwardButton])
+        leftStackView.axis = .horizontal
+        leftStackView.alignment = .center
+        leftStackView.spacing = 10
+        leftStackView.distribution = .fillEqually
+
+        urlTextField.leftView = leftStackView
+        urlTextField.leftViewMode = .always
+        
+        let rightPadding = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 30))
+
+        let linkButton = UIButton()
+        linkButton.setImage(UIImage(systemName: "link"), for:.normal)
+        linkButton.frame = CGRect(x: 0, y: 10, width: 30, height: 30)
+        linkButton.tintColor = .gray
+        
+        let reloadButton = UIButton()
+        reloadButton.setImage(UIImage(systemName: "arrow.clockwise"), for:.normal)
+        reloadButton.tintColor = .gray
+        reloadButton.addTarget(self, action: #selector(handleReloadPage), for: .touchUpInside)
+        
+        let rightStackView = UIStackView(arrangedSubviews: [linkButton, reloadButton, rightPadding])
+        rightStackView.axis = .horizontal
+        rightStackView.alignment = .center
+        rightStackView.spacing = 10
+        rightStackView.distribution = .fillEqually
+
+        urlTextField.rightView = rightStackView
+        urlTextField.rightViewMode = .always
+
+        addSubview(urlTextField)
+        addSubview(rightStackView)
+        addSubview(leftStackView)
+
+        NSLayoutConstraint.activate([
+            urlTextField.leadingAnchor.constraint(equalTo: leadingAnchor, constant:10),
+            urlTextField.trailingAnchor.constraint(equalTo: trailingAnchor, constant:-10),
+            urlTextField.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            urlTextField.heightAnchor.constraint(equalToConstant: 30)
+        ])
     }
     
+    private func setupBottomBarViewForHiddenState() {}
     
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         textField.resignFirstResponder()  // Dismiss keyboard
@@ -220,8 +300,24 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         clearSubViews()
         setupBottomBarViewForSearchingState()
     }
+    @objc func setInfoState() {
+        self.context = .infoState
+        updateHeight(for:.infoState)
+        clearSubViews()
+        setupBottomBarViewForInfoState()
+    }
+    
     @objc func handleTabsButtonPressed() {
         tabsDelegate?.showTabSelector()
+    }
+    @objc func handleReloadPage() {
+        reloadDelegate?.reloadPage()
+    }
+    @objc func handleForwardButtonPressed() {
+        forwardDelegate?.goForward()
+    }
+    @objc func handleBackButtonPressed() {
+        backwardDelegate?.goBack()
     }
     @objc func setBrowseState() {
         self.context = .browsingState
