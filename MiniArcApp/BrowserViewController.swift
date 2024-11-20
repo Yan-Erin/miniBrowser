@@ -14,8 +14,7 @@ struct BrowserTab {
     var url: URL?
 }
 
-
-class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate, ShowTabsViewDelegate, PageForwardDelegate, PageBackwardDelegate, PageReloadDelegate {
+class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate, ShowTabsViewDelegate, PageForwardDelegate, PageBackwardDelegate, PageReloadDelegate, GetCurrentTabTitle{
 
     private var tabs: [BrowserTab] = []
     private var currentTabIndex: Int = 0
@@ -33,9 +32,9 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         setupUI()
         webView.navigationDelegate = self
         setupGestures()
+
     }
 
-    
     deinit {
         webView.removeObserver(self, forKeyPath: "title")
     }
@@ -80,6 +79,7 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         bottomBar.backwardDelegate = self
         bottomBar.forwardDelegate = self
         bottomBar.reloadDelegate = self
+        bottomBar.getCurrentTitleDelegate = self
 
         bottomBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bottomBar)
@@ -133,7 +133,7 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
     }
       
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        currentTitle = webView.title
+        currentTitle = webView.title  ?? "Untitled"
 
         if let index = tabs.firstIndex(where: { $0.webView == webView }) {
             tabs[index].title = webView.title ?? "Untitled"
@@ -202,6 +202,7 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         guard index >= 0 && index < tabs.count else { return }
         webView.removeFromSuperview()
         webView = tabs[index].webView
+        currentTitle = webView.title  ?? "Untitled"
         view.insertSubview(webView, belowSubview: bottomBar)
         webView.translatesAutoresizingMaskIntoConstraints = false
         setupWebView()
@@ -219,6 +220,8 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         tabSelector.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
         present(tabSelector, animated: true, completion: nil)
     }
-    
+    func getCurrentTabTitle() -> String {
+        return currentTitle
+    }
 }
 
