@@ -160,24 +160,13 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
 
     private func setupBottomBarViewForBrowsingState() {
         let tabsButton = UIButton(type: .system)
-
         tabsButton.setImage(UIImage(systemName: "square.on.square", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)), for: .normal)
         tabsButton.addTarget(self, action:#selector(handleTabsButtonPressed), for:.touchUpInside)
+        tabsButton.tintColor = UIColor.darkGray
         
         let plusButton = makePlusButton()
-        
-        let moreInfoButton = UIButton(type: .system)
-        moreInfoButton.setImage(UIImage(systemName: "chevron.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .regular)), for: .normal)
-        moreInfoButton.addTarget(self, action: #selector(setInfoState), for: .touchUpInside)
-        moreInfoButton.tintColor = UIColor.darkGray
-        moreInfoButton.backgroundColor = UIColor.lightGray.withAlphaComponent(0.25)
-        moreInfoButton.layer.borderColor = UIColor.gray.cgColor
-        moreInfoButton.layer.cornerRadius = 16
-        NSLayoutConstraint.activate([
-            moreInfoButton.widthAnchor.constraint(equalToConstant: 32),
-            moreInfoButton.heightAnchor.constraint(equalToConstant: 32)
-        ])
-        
+        let moreInfoButton = makeMoreInfoButton()
+   
         let stackView = UIStackView(arrangedSubviews: [tabsButton, plusButton, moreInfoButton])
         stackView.axis = .horizontal
         stackView.alignment = .center
@@ -213,8 +202,8 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         addSubview(urlTextField)
         
         NSLayoutConstraint.activate([
-            urlTextField.leadingAnchor.constraint(equalTo: leadingAnchor, constant:10),
-            urlTextField.trailingAnchor.constraint(equalTo: trailingAnchor, constant:-10),
+            urlTextField.leadingAnchor.constraint(equalTo: leadingAnchor, constant:13),
+            urlTextField.trailingAnchor.constraint(equalTo: trailingAnchor, constant:-13),
             urlTextField.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             urlTextField.heightAnchor.constraint(equalToConstant: 42)
         ])
@@ -223,6 +212,8 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         searchesTableView.register(UITableViewCell.self, forCellReuseIdentifier: "SearchCell")
         searchesTableView.delegate = self
         searchesTableView.dataSource = self
+        searchesTableView.separatorStyle = .none
+        searchesTableView.backgroundColor = UIColor.clear
         searchesTableView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(searchesTableView)
         
@@ -334,8 +325,12 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
             let cell = tableView.dequeueReusableCell(withIdentifier: "SearchCell", for: indexPath)
             let search = previousSearches[indexPath.row]
+        cell.imageView?.image = UIImage(systemName: "magnifyingglass",
+                                        withConfiguration: UIImage.SymbolConfiguration(pointSize: 12))?.withTintColor(.darkGray, renderingMode: .alwaysOriginal)
             cell.textLabel?.text = search.title.isEmpty ? search.urlString : search.title
-            cell.textLabel?.textColor = .systemBlue
+        cell.textLabel?.textColor = .label
+        cell.textLabel?.font = UIFont.systemFont(ofSize: 13)
+        cell.backgroundColor = UIColor.clear
             return cell
     }
     
@@ -423,6 +418,20 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
                plusButton.heightAnchor.constraint(equalToConstant: 40)
         ])
         return plusButton
+    }
+    func makeMoreInfoButton() -> UIButton {
+        let moreInfoButton = UIButton(type: .system)
+        moreInfoButton.setImage(UIImage(systemName: "chevron.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .regular)), for: .normal)
+        moreInfoButton.addTarget(self, action: #selector(setInfoState), for: .touchUpInside)
+        moreInfoButton.tintColor = UIColor.darkGray
+        moreInfoButton.backgroundColor = UIColor.lightGray.withAlphaComponent(0.25)
+        moreInfoButton.layer.borderColor = UIColor.gray.cgColor
+        moreInfoButton.layer.cornerRadius = 16
+        NSLayoutConstraint.activate([
+            moreInfoButton.widthAnchor.constraint(equalToConstant: 32),
+            moreInfoButton.heightAnchor.constraint(equalToConstant: 32)
+        ])
+        return moreInfoButton
     }
     // makes top 2 corners rounded
     func makeStateRoundedCorner() {

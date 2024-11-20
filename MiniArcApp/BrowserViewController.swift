@@ -220,6 +220,7 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         tabSelector.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
         present(tabSelector, animated: true, completion: nil)
     }
+    
     func getCurrentTabTitle() -> String {
         return currentTitle
     }
