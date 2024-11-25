@@ -14,17 +14,24 @@ struct BrowserTab {
     var url: URL?
 }
 
-class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate, ShowTabsViewDelegate, PageForwardDelegate, PageBackwardDelegate, PageReloadDelegate, GetCurrentTabTitle{
+class BrowserData {
+    static let shared = BrowserData()
+    var tabs: [BrowserTab] = []
+    var currentTabIndex: Int = 0
+    var currentTabTitle: String = ""
+    private init() {}
+}
 
-    private var tabs: [BrowserTab] = []
-    private var currentTabIndex: Int = 0
+class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate, ShowTabsViewDelegate, GetCurrentTabTitle, GetCurrentURL, TabsViewControllerDelegate, BrowserViewDelegate{
+
     private var webView: WKWebView!
     private var urlTextField: UITextField!
     private var goButton: UIButton!
     private var backButton:UIButton!
     private var forwardButton:UIButton!
     private var bottomBar: BottomBarView!
-    private var currentTitle: String!
+    private var currentView: UIView!
+
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -32,7 +39,6 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         setupUI()
         webView.navigationDelegate = self
         setupGestures()
-
     }
 
     deinit {
@@ -70,23 +76,38 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
     
     private func setupUI() {
         webView = WKWebView(frame: .zero)
+        currentView = webView  
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         
         bottomBar = BottomBarView(context: .defaultState)
         bottomBar.delegate = self
         bottomBar.tabsDelegate = self
-        bottomBar.backwardDelegate = self
-        bottomBar.forwardDelegate = self
-        bottomBar.reloadDelegate = self
+        bottomBar.browserViewDelegate = self
         bottomBar.getCurrentTitleDelegate = self
-
+        bottomBar.getCurrentURLDelegate = self
+        
         bottomBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bottomBar)
         
         setupConstraints()
     }
     
+    private func replaceCurrentView(with newView: UIView) {
+        currentView.removeFromSuperview()
+
+        currentView = newView
+        view.insertSubview(currentView, belowSubview: bottomBar)
+        currentView.translatesAutoresizingMaskIntoConstraints = false
+        
+        NSLayoutConstraint.activate([
+            currentView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            currentView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            currentView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            currentView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor)
+        ])
+    }
+
     private func setupBottomBarConstraints() {
         NSLayoutConstraint.activate([
             bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -99,7 +120,7 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
         ])
     }
@@ -133,16 +154,27 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
     }
       
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        currentTitle = webView.title  ?? "Untitled"
+        BrowserData.shared.currentTabTitle = webView.title  ?? "Untitled"
 
-        if let index = tabs.firstIndex(where: { $0.webView == webView }) {
-            tabs[index].title = webView.title ?? "Untitled"
-            tabs[index].url = webView.url
-            let browsedPage = BrowserPage(url: webView.url!, urlString: webView.url?.absoluteString ?? "", title: currentTitle)
+        if let index = BrowserData.shared.tabs.firstIndex(where: { $0.webView == webView }) {
+            BrowserData.shared.tabs[index].title = webView.title ?? "Untitled"
+            BrowserData.shared.tabs[index].url = webView.url
+            let browsedPage = BrowserPage(url: webView.url!, urlString: webView.url?.absoluteString ?? "", title: BrowserData.shared.currentTabTitle)
             bottomBar.addToPrevSearches(browsedPage)
         }
     }
     
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if let httpResponse = navigationResponse.response as? HTTPURLResponse {
+            let statusCode = httpResponse.statusCode
+            
+            if statusCode == 404 {
+                print("Page not found (404)")
+            }
+        }
+        decisionHandler(.allow)
+    }
+
     func didRequestURLLoad(_ urlString: String) {
         loadUrl(urlString)
     }
@@ -162,6 +194,17 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
     
     @objc internal func reloadPage() {
         webView.reload()
+    }
+    
+    func respondToBottomBarRequests(_ requestEnum: RequestEnum) {
+        switch requestEnum {
+        case .reload:
+            reloadPage()
+        case .goBack:
+            goBack()
+        case .goForward:
+            goForward()
+        }
     }
     
     @objc func respondToSwipeGesture(gesture:UIGestureRecognizer) {
@@ -186,6 +229,7 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
             }
         }
     }
+    
     private func createNewTab(with url: URL? = nil) {
         let newWebView = WKWebView()
         newWebView.navigationDelegate = self
@@ -193,36 +237,44 @@ class BrowserViewController: UIViewController, BottomBarViewDelegate, WKNavigati
             newWebView.load(URLRequest(url:url))
         }
         let newTab = BrowserTab(webView: newWebView, title: newWebView.title ?? "Untitled", url: url)
-        tabs.append(newTab)
-        currentTabIndex = tabs.count - 1
-        switchToTab(at:currentTabIndex)
+        BrowserData.shared.tabs.append(newTab)
+        BrowserData.shared.currentTabIndex = BrowserData.shared.tabs.count - 1
+        switchToTab(at:BrowserData.shared.currentTabIndex)
+        bottomBar.setBrowseState()
     }
     
     private func switchToTab(at index: Int) {
-        guard index >= 0 && index < tabs.count else { return }
+        guard index >= 0 && index < BrowserData.shared.tabs.count else { return }
         webView.removeFromSuperview()
-        webView = tabs[index].webView
-        currentTitle = webView.title  ?? "Untitled"
+        webView = BrowserData.shared.tabs[index].webView
+        BrowserData.shared.currentTabTitle = webView.title  ?? "Untitled"
         view.insertSubview(webView, belowSubview: bottomBar)
         webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.isUserInteractionEnabled = true
         setupWebView()
+        replaceCurrentView(with: webView)
+        bottomBar.setBrowseState()
+
+    }
+    
+    func didSelectTab(at index: Int) {
+        switchToTab(at: index)
     }
     
     @objc func showTabSelector() {
-        let tabSelector = UIAlertController(title: "Tabs", message: nil, preferredStyle: .actionSheet)
-        
-        for (index, tab) in tabs.enumerated() {
-            tabSelector.addAction(UIAlertAction(title: tab.title, style: .default, handler: { _ in
-                self.switchToTab(at: index)
-            }))
-        }
-        
-        tabSelector.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
-        present(tabSelector, animated: true, completion: nil)
+        let tabsVC = TabsViewController()
+        tabsVC.delegate = self  // Set delegate for tab selection
+        addChild(tabsVC)  // Add as a child view controller
+        replaceCurrentView(with: tabsVC.view)
+        tabsVC.didMove(toParent: self)  // Notify it has been added
+        bottomBar.setDefaultState()
     }
     
     func getCurrentTabTitle() -> String {
-        return currentTitle
+        return BrowserData.shared.currentTabTitle
+    }
+    func getCurrURL() -> String {
+        return webView.url?.absoluteString ?? ""
     }
 }
 

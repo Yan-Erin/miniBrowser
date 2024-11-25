@@ -15,19 +15,22 @@ protocol BottomBarViewDelegate: AnyObject {
     func showTabSelector()
 }
 
-@objc protocol PageForwardDelegate: AnyObject {
-    func goForward()
+protocol BrowserViewDelegate: AnyObject {
+    func respondToBottomBarRequests(_ requestEnum:RequestEnum)
 }
 
-@objc protocol PageBackwardDelegate: AnyObject {
-    func goBack()
-}
-@objc protocol PageReloadDelegate: AnyObject {
-    func reloadPage()
+@objc protocol GetCurrentURL: AnyObject {
+    func getCurrURL() -> String
 }
 
 protocol GetCurrentTabTitle: AnyObject {
     func getCurrentTabTitle() -> String
+}
+
+enum RequestEnum {
+    case reload
+    case goBack
+    case goForward
 }
 
 enum BottomBarContext {
@@ -47,10 +50,9 @@ struct BrowserPage {
 class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableViewDataSource {
     weak var delegate: BottomBarViewDelegate?
     weak var tabsDelegate: ShowTabsViewDelegate?
-    weak var forwardDelegate:PageForwardDelegate?
-    weak var backwardDelegate:PageBackwardDelegate?
-    weak var reloadDelegate:PageReloadDelegate?
+    weak var browserViewDelegate:BrowserViewDelegate?
     weak var getCurrentTitleDelegate:GetCurrentTabTitle?
+    weak var getCurrentURLDelegate: GetCurrentURL?
     
     private var context: BottomBarContext
     private var heightConstraint: NSLayoutConstraint?
@@ -235,11 +237,9 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         urlTextField.layer.borderColor =  UIColor.gray.cgColor
         urlTextField.layer.borderWidth = 0.45
         urlTextField.clipsToBounds = true
-        urlTextField.keyboardType = .URL
-        urlTextField.autocapitalizationType = .none
-        urlTextField.returnKeyType = .go
         urlTextField.delegate = self
         urlTextField.layer.borderWidth = 0.1
+        urlTextField.addTarget(self, action: #selector(setSearchState), for: .editingDidBegin)
         urlTextField.translatesAutoresizingMaskIntoConstraints = false
         // make placeholder color black grey like in arc
         urlTextField.attributedPlaceholder = NSAttributedString(
@@ -275,6 +275,7 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         linkButton.setImage(UIImage(systemName: "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13)), for:.normal)
         linkButton.frame = CGRect(x: 0, y: 10, width: 30, height: 30)
         linkButton.tintColor =  UIColor.label
+        linkButton.addTarget(self, action: #selector(copyToClipboard), for:.touchUpInside)
         
         let reloadButton = UIButton()
         reloadButton.setImage(UIImage(systemName: "arrow.clockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13)), for:.normal)
@@ -366,13 +367,13 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         tabsDelegate?.showTabSelector()
     }
     @objc func handleReloadPage() {
-        reloadDelegate?.reloadPage()
+        browserViewDelegate?.respondToBottomBarRequests(.reload)
     }
     @objc func handleForwardButtonPressed() {
-        forwardDelegate?.goForward()
+        browserViewDelegate?.respondToBottomBarRequests(.goForward)
     }
     @objc func handleBackButtonPressed() {
-        backwardDelegate?.goBack()
+        browserViewDelegate?.respondToBottomBarRequests(.goBack)
     }
     @objc func setBrowseState() {
         self.context = .browsingState
@@ -395,9 +396,14 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
         setupBottomBarViewForDefaultState()
         clearRoundedCorners() 
     }
+    
     func getBottomBarState() -> BottomBarContext {
          return context
      }
+    
+    @objc func copyToClipboard() {
+        UIPasteboard.general.string = getCurrentURLDelegate?.getCurrURL()
+    }
     
     /* UI Helpers */
     func makePlusButton() -> UIButton{
@@ -447,5 +453,10 @@ class BottomBarView: UIView, UITextFieldDelegate, UITableViewDelegate,UITableVie
     //clears above func
     func clearRoundedCorners() {
         self.layer.mask = nil
+    }
+    
+    private func fetchSuggestions(for query: String) {
+        let apiKey = Bundle.main.infoDictionary?["GOOGLE_API_KEY"]
+        
     }
 }
